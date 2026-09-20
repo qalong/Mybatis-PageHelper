@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,14 +25,16 @@
 package com.github.pagehelper.dialect;
 
 import com.github.pagehelper.Dialect;
-import com.github.pagehelper.PageRowBounds;
 import com.github.pagehelper.parser.CountSqlParser;
+import com.github.pagehelper.parser.OrderBySqlParser;
+import com.github.pagehelper.parser.defaults.DefaultCountSqlParser;
+import com.github.pagehelper.parser.defaults.DefaultOrderBySqlParser;
+import com.github.pagehelper.util.ClassUtil;
 import org.apache.ibatis.cache.CacheKey;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.session.RowBounds;
 
-import java.util.List;
 import java.util.Properties;
 
 /**
@@ -42,10 +44,17 @@ import java.util.Properties;
  */
 public abstract class AbstractDialect implements Dialect {
     //处理SQL
-    protected CountSqlParser countSqlParser = new CountSqlParser();
+    protected CountSqlParser   countSqlParser;
+    protected OrderBySqlParser orderBySqlParser;
 
     @Override
     public String getCountSql(MappedStatement ms, BoundSql boundSql, Object parameterObject, RowBounds rowBounds, CacheKey countKey) {
         return countSqlParser.getSmartCountSql(boundSql.getSql());
+    }
+
+    @Override
+    public void setProperties(Properties properties) {
+        this.countSqlParser = ClassUtil.newInstance(properties.getProperty("countSqlParser"), CountSqlParser.class, properties, DefaultCountSqlParser::new);
+        this.orderBySqlParser = ClassUtil.newInstance(properties.getProperty("orderBySqlParser"), OrderBySqlParser.class, properties, DefaultOrderBySqlParser::new);
     }
 }

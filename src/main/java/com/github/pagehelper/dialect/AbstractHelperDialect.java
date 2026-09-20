@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,6 @@ import com.github.pagehelper.Constant;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageRowBounds;
-import com.github.pagehelper.parser.OrderByParser;
 import com.github.pagehelper.util.ExecutorUtil;
 import com.github.pagehelper.util.MetaObjectUtil;
 import com.github.pagehelper.util.StringUtil;
@@ -188,7 +187,7 @@ public abstract class AbstractHelperDialect extends AbstractDialect implements C
         String orderBy = page.getOrderBy();
         if (StringUtil.isNotEmpty(orderBy)) {
             pageKey.update(orderBy);
-            sql = OrderByParser.converToOrderBySql(sql, orderBy);
+            sql = orderBySqlParser.converToOrderBySql(sql, orderBy);
         }
         if (page.isOrderByOnly()) {
             return sql;
@@ -213,12 +212,13 @@ public abstract class AbstractHelperDialect extends AbstractDialect implements C
             return pageList;
         }
         page.addAll(pageList);
-        if (!page.isCount()) {
-            page.setTotal(-1);
-        } else if ((page.getPageSizeZero() != null && page.getPageSizeZero()) && page.getPageSize() == 0) {
+        //调整判断顺序，如果查全部，total就是size，如果只排序，也是全部，其他情况下如果不查询count就是-1
+        if ((page.getPageSizeZero() != null && page.getPageSizeZero()) && page.getPageSize() == 0) {
             page.setTotal(pageList.size());
         } else if (page.isOrderByOnly()) {
             page.setTotal(pageList.size());
+        } else if (!page.isCount()) {
+            page.setTotal(-1);
         }
         return page;
     }
@@ -230,7 +230,7 @@ public abstract class AbstractHelperDialect extends AbstractDialect implements C
 
     @Override
     public void setProperties(Properties properties) {
-
+        super.setProperties(properties);
     }
 
     /**

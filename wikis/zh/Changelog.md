@@ -1,5 +1,149 @@
 ## 更新日志
 
+
+### 6.1.1 - 2025-06-20
+
+- 新增对 SunDB 数据库的分页功能支持 **by wangsl**
+- 新增对 Xugu（虚谷数据库）的适配支持 **by 吴启洋**
+- 修复在复制 `countBoundSql` 时未正确复制 `additionalParameter` 的问题 **by yefeng**
+- 修复 `offsetPage` 示例代码错误 **by S00ahKim**
+- 修复 Jakarta/Javax ServletRequest 兼容性问题，支持 Spring Boot 3.x **by PING**
+- 新增 `PageInfo.of()` 重载方法，支持手动指定查询记录总数返回分页信息 **by yesAnd**
+- 升级 MyBatis 版本至 3.5.19（从 3.5.10）
+- 升级 Guava 版本至 33.4.8-jre（从 32.0.0-jre）
+- 升级 Logback Classic 版本至 1.2.13（从 1.2.11）
+- 优化 Xugu JDBC 依赖配置，添加 `<scope>test</scope>`
+- 修复英文文档中的拼写错误和链接引用 **by Coco Liliace**
+- 补充相关注释信息，提高代码可读性 **by yesAnd**
+- 解决依赖安全漏洞，更新相关组件版本
+- Maven 发布从旧 OSSRH (oss.sonatype.org) 迁移到新的 Maven Central Portal (central.sonatype.com)
+- pagehelper-sqlparser 同步升级至 6.1.1，新增 sqlparser4.9 和 sqlparser5.1 模块，支持 JSqlParser 4.9/5.0/5.1/5.2/5.3
+
+#### 兼容性说明
+- 本版本与之前版本保持向后兼容
+- 新增数据库支持：SunDB、Xugu（虚谷数据库）
+- 修复了 Spring Boot 3.x 兼容性问题，建议使用 Jakarta EE 的用户升级
+
+#### 升级建议
+- 所有用户建议升级，特别是使用 Spring Boot 3.x 或需要新数据库支持的用户
+- 使用 SunDB 或虚谷数据库的用户可以直接使用分页功能
+- 升级前请确保相关依赖版本兼容性
+
+### 6.1.0 - 2023-12-16
+
+- 发布6.1.0，PageHelper 提供 jsqlparser直接依赖都是中间接口，可以通过SPI替换默认实现
+- 升级jsqlparser版本4.7，重新实现order by，分页，count查询
+- 简化pom.xml配置，去掉shade内嵌jsqlparser方式，改为通过外部依赖选择不同的jsqlparser版本，允许自己SPI扩展
+- jsqlparser解析不使用线程池，支持SPI扩展覆盖SqlParser实现
+- SqlServer分页改为SqlServerSqlParser接口，添加参数 sqlServerSqlParser 覆盖默认值
+- OrderByParser提取OrderBySqlParser接口，增加 orderBySqlParser 参数，可以覆盖默认实现
+- OrderByParser静态方法改为普通方法，为后续改接口做准备
+- jdk8+后不再需要JSqlParser接口，移除该接口，文档标记该参数（_该参数早期用于支持sqlserver特殊配置_）
+  兼容jsqlparser4.7版本
+- maven-compiler-plugin固定版本以去除警告，并增加构建稳定性 qxo
+- gitignore .vscode for vscode ide qxo
+- 修改bug https://github.com/pagehelper/Mybatis-PageHelper/issues/779 chenyuehui
+
+为了兼容 jsqlparser 4.5 和 4.7，以及后续可能存在的其他版本，新建了一个 pagehelper-sqlparser 项目，目前提供了 4.5 和 4.7
+两个实现，
+使用时从 pagehelper 排除 jsqlparser，然后选择一个 jsqlparser 实现即可，当前版本默认使用的 4.7 版本的代码，
+因此如果想换 4.5 的实现，可以按照下面方式进行配置：
+
+```xml
+
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>pagehelper</artifactId>
+    <version>6.1.1</version>
+    <exclusions>
+        <exclusion>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>sqlparser4.5</artifactId>
+    <version>6.1.1</version>
+</dependency>
+```
+
+SPI 替换默认值的优先级低于 `sqlServerSqlParser`,`orderBySqlParser`,`countSqlParser` 参数指定的实现，不指定时如果存在SPI实现，即可生效，
+SPI 可以参考 pagehelper-sqlsource 模块代码。
+
+JSqlParser 默认解析 SQL 会使用临时创建的 `Executors.newSingleThreadExecutor()`，这里通过 API 跳过了线程池：
+
+```java
+CCJSqlParser parser = CCJSqlParserUtil.newParser(statementReader);
+parser.withSquareBracketQuotation(true);
+return parser.Statement();
+```
+
+JSqlParser 使用线程池的目的是为了防止解析超时，因此如果你遇到过超时的情况，可以引入下面的依赖（通过SPI覆盖了默认实现，超时时间10秒）：
+
+```xml
+
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>sqlparser-timeout</artifactId>
+    <version>6.1.1</version>
+</dependency>
+```
+
+### 6.0.0 - 2023-11-05
+
+- 基于jdk8适配，6.0开始不支持jdk6和7，如果有需要可以使用5.x版本
+- 增加异步count支持，全局配置`asyncCount`，默认`false`，单次设置：`PageHelper.startPage(1, 10).enableAsyncCount()`;
+  异步使用独立连接（事务）查询，有增删改操作影响查询时不适合开启异步查询。closed #334
+- JSqlParser默认开启 `parser.withSquareBracketQuotation(true)`，支持 SqlServer `[]`
+- feat: 在`PageInfo`类中新增了用以进行数据对象转换的方法 ` <E> PageInfo<E> convert(Page.Function<T, E> function)` **by
+  codeke**
+- `CountSqlParser`改为接口，允许通过`countSqlParser`参数替换为自己的实现，支持 #772
+- `dialectAlias`支持简化配置，例如`dm=oracle;oracle=oracle9i`，直接引用现在的缩写，不用写类全名
+- `countColumn`添加注入检测，fixed #686
+- 增加`PageParam`类，不内嵌对象（会影响使用），如果想用可以继承该对象，closed #562
+- 所有异常信息改为英文提示
+- 放开 `setLocalPage`，支持 #771
+- 解决`sqlserver`带union sql解析时处理order by错误的问题，fixed #768
+- 优化total逻辑，解决指定不分页查询，同时指定order by时无效的问题，fixed #641
+- 修改 dialect 实例化逻辑，保证类完成配置后使用，fixed #742
+- `dialectAliasMap`改为`LinkedHashMap`，可以按配置顺序进行匹配，fixed #758
+- 行云数据库分页BUG修复 **by maimaitiyaer_bonc**
+
+### 5.3.3 - 2023-06-03
+
+- Ignoring unnecessarily generated surefire-report **by java-codehunger**
+- 支持从URL中解析openGauss 数据库 对应的方言 **by saxisuer**
+- 修复sql注入检验不正确问题 #716 **by uyong**
+- 支持从url中解析人大金仓kingbase8对应的方言 **by univ**
+- 添加支持cirrodata的分页 #705 **by sxh0570**
+
+### 5.3.2 - 2022-09-18
+
+- 使用文档更新，所有参数都包含在内，首页默认文档改为中文。
+- Add support for kingbase. by **HanHuimin001**
+- 增加 `debug` 参数，默认 `false`，为`true`时开启`debug`模式，开始 `debug` 模式后将记录调用堆栈 by **huyingqian**
+- Add 支持count的sql支持hint语法 by **zhanliquan**
+- 增加 `PageProperties` 接口，框架内部实例化的扩展类如果实现了这个接口，可以通过这个接口的方法获取分页插件配置。
+- 增加 `CountMsIdGen` 接口，可以通过 `countMsIdGen`
+  配置自定义实现类，该类用于生成查询对应COUNT查询的msId。默认实现还是使用`countSuffix`
+  ，通过扩展可以实现如 `selectByExample` 映射到对应的 `selectCountByExample` 方法。
+- 增加 `keepOrderBy` 和 `keepSubSelectOrderBy` 配置。
+- 增加 `sqlParser` 配置，增加 `JSqlParser` 接口，解决 jsqlparser 和 jdk 兼容性导致无法额外配置的问题(**6.1.0 移除该参数
+  **)。
+- 测试使用 logback 日志框架，去掉log4j。
+- 解决 `dialectKey` 为空导致NPE，fixed #656
+
+关于以上参数的详细介绍，请查看 [如何使用分页插件](HowToUse.md)。
+
+### 5.3.1 - 2022-06-14
+
+- 处理 CVE-2022-28111 漏洞，限制 order by 参数，避免 SQL 注入
+- Add support for as400. **by bluezealot**
+- 优化分页结果包装类的泛型参数 **by 章福来**
+- 规范PostgreSQL分页参数的顺序 **by outian**
+
 ### 5.3.0 - 2021-10-07
 
 - 增加 `AutoDialect` 接口用于自动获取数据库类型，可以通过 `autoDialectClass` 配置为自己的实现类，默认使用 `DataSourceNegotiationAutoDialect`，优先根据连接池获取。
@@ -12,12 +156,12 @@
 - 启动中增加 banner, 需要日志级别 debug，可以通过 `-Dpagehelper.banner=false` 或者环境变量 `PAGEHELPER_BANNER=false` 关闭
   ```
    DEBUG [main] -
-   
-   ,------.                           ,--.  ,--.         ,--.                         
+
+   ,------.                           ,--.  ,--.         ,--.
    |  .--. '  ,--,--.  ,---.   ,---.  |  '--'  |  ,---.  |  |  ,---.   ,---.  ,--.--.
    |  '--' | ' ,-.  | | .-. | | .-. : |  .--.  | | .-. : |  | | .-. | | .-. : |  .--'
-   |  | --'  \ '-'  | ' '-' ' \   --. |  |  |  | \   --. |  | | '-' ' \   --. |  |    
-   `--'       `--`--' .`-  /   `----' `--'  `--'  `----' `--' |  |-'   `----' `--'    
+   |  | --'  \ '-'  | ' '-' ' \   --. |  |  |  | \   --. |  | | '-' ' \   --. |  |
+   `--'       `--`--' .`-  /   `----' `--'  `--'  `----' `--' |  |-'   `----' `--'
    `---'                                   `--'                        is intercepting.
    ```
   增加 banner 的目的在于，如果你配置了多次分页插件，你会看到 banner 输出多次，你可以在 `PageInterceptor` 构造方法断点看看那些地方进行了实例化。
@@ -126,8 +270,8 @@ public interface BoundSqlInterceptor {
 
 3. 调用分页方法时，如果 count > 0，就会执行 `Type.PAGE_SQL` 类型的拦截器方法，这个方法只有执行分页时才会执行。
 
->通过 `PageHelper.startPage(1, Integer.MAX_VALUE, false).boundSqlInterceptor(BoundSqlInterceptor boundSqlInterceptor)` 
->这种指定的参数时，也能起到不进行分页和count查询，但是可以执行 `Type.ORIGINAL` 类型的拦截器方法。
+> 通过 `PageHelper.startPage(1, Integer.MAX_VALUE, false).boundSqlInterceptor(BoundSqlInterceptor boundSqlInterceptor)`
+> 这种指定的参数时，也能起到不进行分页和count查询，但是可以执行 `Type.ORIGINAL` 类型的拦截器方法。
 
 当前拦截器在整个分页执行过程中，会执行3次，对应 Type 枚举的 3 个类型，执行顺序也一致。
 
@@ -450,7 +594,7 @@ private static final Set<String> AGGREGATE_FUNCTIONS = new HashSet<String>(Array
 
 - `Page` 的 `toString` 方法增加 `super.toString()`。最终输出形式如 `Page{属性}[集合]`。
 - 增加 `defaultCount` 参数，用于控制默认不带 count 查询的方法中，是否执行 count 查询，默认 true 会执行 count 查询，这是一个全局生效的参数，多数据源时也是统一的行为。
-- 增加 `dialectAlias` 参数，允许配置自定义实现的 别名，可以用于根据 JDBCURL 自动获取对应实现，允许通过此种方式覆盖已有的实现，配置示例如（多个时分号隔开）： 
+- 增加 `dialectAlias` 参数，允许配置自定义实现的 别名，可以用于根据 JDBCURL 自动获取对应实现，允许通过此种方式覆盖已有的实现，配置示例如（多个时分号隔开）：
   ```xml
   <property name="dialectAlias" value="oracle=com.github.pagehelper.dialect.helper.OracleDialect"/>
   ```
@@ -521,13 +665,13 @@ private static final Set<String> AGGREGATE_FUNCTIONS = new HashSet<String>(Array
 上面方法执行输出的部分日志如下：
 ```
 DEBUG [main] - ==>  Preparing: select count(distinct a.id) from user a left join user b on a.id = b.id
-DEBUG [main] - ==> Parameters: 
+DEBUG [main] - ==> Parameters:
 TRACE [main] - <==    Columns: C1
 TRACE [main] - <==        Row: 183
 DEBUG [main] - <==      Total: 1
 DEBUG [main] - Cache Hit Ratio [com.github.pagehelper.mapper.CountryMapper]: 0.0
 DEBUG [main] - ==>  Preparing: select a.id,b.name,a.py from user a left join user b on a.id = b.id order by a.id LIMIT 10
-DEBUG [main] - ==> Parameters: 
+DEBUG [main] - ==> Parameters:
 TRACE [main] - <==    Columns: ID, COUNTRYNAME, COUNTRYCODE
 TRACE [main] - <==        Row: 1, Angola, AO
 TRACE [main] - <==        Row: 2, Afghanistan, AF
@@ -556,7 +700,7 @@ TRACE [main] - <==        Row: 3, Albania, AL
 - 使用 [QueryInterceptor 规范](https://github.com/pagehelper/Mybatis-PageHelper/blob/master/src/main/java/com/github/pagehelper/QueryInterceptor.java) 处理分页逻辑
 - 新的分页插件拦截器为 `com.github.pagehelper.PageInterceptor`
 - 新的 `PageHelper` 是一个特殊的 `Dialect` 实现类，以更友好的方式实现了以前的功能
-- 新的分页插件仅有 `dialect` 一个参数，默认的 `dialect` 实现类为 `PageHelper` 
+- 新的分页插件仅有 `dialect` 一个参数，默认的 `dialect` 实现类为 `PageHelper`
 - `PageHelper` 仍然支持以前提供的参数，在最新的使用文档中已经全部更新
 - `PageHelper` 的 `helperDialect` 参数和以前的 `dialect` 功能一样，具体可以看文档的参数说明
 - 增加了基于纯 `RowBounds` 和 `PageRowBounds` 的分页实现，在 `com.github.pagehelper.dialect.rowbounds` 包中，这是用于作为 `dialect` 参数示例的实现，后面会补充更详细的文档
@@ -768,44 +912,44 @@ total = PageHelper.count(()->userMapper.selectLike(user));
 ### 3.6.2 - 2015-03-09
 
  - 本次更新只是增加了一个异常提示，当错误的配置了多个分页插件时，会有更友好的错误提示：
- 
+
    >分页插件配置错误:请不要在系统中配置多个分页插件(使用Spring时,mybatis-config.xml和Spring<bean>配置方式，请选择其中一种，不要同时配置多个分页插件)！
 
 ### 3.6.1 - 2015-02-28
 
  - 解决select distinct导致count查询结果不正确的bug#35
- 
+
  - 完善测试
 
 ### 3.6.0 - 2015-02-03
 
- - 支持db2数据库
- 
- - 支持sqlserver(2005+)数据库
- 
- - sqlserver注意事项： 
-   - 请先保证你的SQL可以执行
-   - sql中最好直接包含order by，可以自动从sql提取
-   - 如果没有order by，可以通过入参提供，但是需要自己保证正确(<b>3.7.0版本以后，移除了该参数，请在sql中包含order by</b>)
-   - 如果sql有order by，可以通过orderby参数覆盖sql中的order by
-   - order by的列名不能使用别名(`UNION,INTERSECT,MINUS,EXCEPT`等复杂sql不受限制，具体可以自己尝试)
-   - 表和列使用别名的时候不要使用单引号(')
+- 支持db2数据库
 
- - 简单修改结构
- 
- - `startPage`方法返回值从`void`改为`Page`，获取`Page`后可以修改参数值
- 
+- 支持sqlserver(2005+)数据库
+
+- sqlserver注意事项：
+    - 请先保证你的SQL可以执行
+    - sql中最好直接包含order by，可以自动从sql提取
+    - 如果没有order by，可以通过入参提供，但是需要自己保证正确(<b>3.7.0版本以后，移除了该参数，请在sql中包含order by</b>)
+    - 如果sql有order by，可以通过orderby参数覆盖sql中的order by
+    - order by的列名不能使用别名(`UNION,INTERSECT,MINUS,EXCEPT`等复杂sql不受限制，具体可以自己尝试)
+    - 表和列使用别名的时候不要使用单引号(')
+
+- 简单修改结构
+
+- `startPage`方法返回值从`void`改为`Page`，获取`Page`后可以修改参数值
+
  - `Page`增加一个针对sqlserver的属性`orderBy`(<b>3.7.0版本以后，移除了该属性</b>)，用法看上面的<b>注意事项</b>
- 
+
  - `Page`增加了一个链式赋值的方法，可以像下面这样使用：
    `PageHelper.startPage(1,10).count(false).reasonable(true).pageSizeZero(false)`
-   
+
  - `PageHelper`增加了`startPage(int pageNum, int pageSize,String orderBy)`方法(<b>3.7.0版本以后，移除了该方法</b>)，针对sqlserver
 
 ### 3.5.1 - 2015-01-20
 
  - 解决[bug#25](http://git.oschina.net/free/Mybatis_PageHelper/issues/25)，当参数是null并且是动态查询时，由于加入分页参数，导致参数不在是null，因而会导致部分判断出错，导致异常。
- 
+
  - 上面这个bug会影响使用了动态标签并且允许入参为null的所有查询，虽然并不常见，但是建议各位使用最新版本
 
 ### 3.5.0 - 2015-01-11
@@ -835,21 +979,21 @@ total = PageHelper.count(()->userMapper.selectLike(user));
 ### 3.4.1 - 2014-12-24
 
  - 重大bug修复，`SqlParser`解析sql失败的时候返回了不带`count(*)`的sql，导致查询失败。
- 
+
  - 产生原因，由于`SqlParser`在系统中出现的位置修改后，导致这里出现错误。
- 
+
  - 强烈推荐各位更新到最新版本。
- 
+
 ### v3.4.0 - 2014-12-18
 
  - 增加了对`@SelectProvider`注解方法的支持，不使用这种方式的不影响
- 
+
  - 对基本逻辑进行修改，减少反射调用和获取`BoundSql`次数
- 
+
 ### v3.3.2 - 2014-12-10
 
  - `PageInfo` 增加序列化。
- 
+
 ### v3.3.1bug修复 - 2014-12-07
 
 - 动态sql时，判断条件不会出现在ParameterMappings中，会导致获取不到属性。通常是因为判断条件中的属性没有出现在`#{}`中。
@@ -860,34 +1004,37 @@ total = PageHelper.count(()->userMapper.selectLike(user));
 
 2. 独立的`SqlUtil`类，由于原来的`PageHelper`太复杂，因此将拦截器外的其他代码独立到`SqlUtil`中，方便查看代码和维护。`SqlUtil`中增加`Parser`接口，提供一个抽象的`SimpleParser`实现，不同数据库的分页代码通过继承`SimpleParser`实现。
 
-3. 特殊的`Parser`实现类`SqlParser`类，这是一个独立的java类，主要提供了更高性能的count查询sql，可以根据sql自动改为`count(*)`查询，自动去除不需要的`order by`语句，如果需要使用该类，只要把该类放到`SqlUtil`类相同的包下即可，同时需要引入Jar包`jsqlparser-0.9.1.jar`。
+3. 特殊的`Parser`实现类`SqlParser`类，这是一个独立的java类，主要提供了更高性能的count查询sql，可以根据sql自动改为`count(*)`查询，自动去除不需要的`order by`
+   语句，如果需要使用该类，只要把该类放到`SqlUtil`类相同的包下即可，同时需要引入Jar包`jsqlparser-0.9.1.jar`。
 
-4. 增强的`PageInfo`类，`PageInfo`类包含了分页几乎所有需要用到的属性值，减少了对分页逻辑的过多投入。  
+4. 增强的`PageInfo`类，`PageInfo`类包含了分页几乎所有需要用到的属性值，减少了对分页逻辑的过多投入。
 
-4. 分页合理化，自动处理pageNum的异常情况。例如当pageNum<=0时，会设置pageNum=1，然后查询第一页。当pageNum>pages(总页数)时，自动将pageNum=pages，查询最后一页。  
+4. 分页合理化，自动处理pageNum的异常情况。例如当pageNum<=0时，会设置pageNum=1，然后查询第一页。当pageNum>pages(总页数)时，自动将pageNum=pages，查询最后一页。
 
 5. 增加对`PostgreSQL`,`MariaDB`,`SQLite`支持。其中`MariaDB`,`SQLite`和`Mysql`分页一样。
 
-### v3.2.3  
+### v3.2.3
 
-1. 解决`mysql`带有`for update`时分页错误的问题。  
+1. 解决`mysql`带有`for update`时分页错误的问题。
 
-2. 当`pageSize`（或`RowBounds`的`limit`）`<=0` 时不再进行分页查询，只会进行count查询（RowBounds需要配置进行count查询），相当于用分页查询来做count查询了。  
+2. 当`pageSize`（或`RowBounds`的`limit`）`<=0` 时不再进行分页查询，只会进行count查询（RowBounds需要配置进行count查询），相当于用分页查询来做count查询了。
 
-3. 增加了`pageSizeZero`参数，当`pageSizeZero=true`时，如果`pageSize=0`（或`RowBounds.limit`=0），就会查询全部的结果。这个参数对于那些在特殊情况下要查询全部结果的人有用。配置该参数后会与上面第二条冲突，解决方法就是如果只想查询count，就设置`pageSize<0`（如 `-1`），只要不等于0（或者不配置pageSizeZero）就不会出现全部查询的情况。  
+3. 增加了`pageSizeZero`参数，当`pageSizeZero=true`时，如果`pageSize=0`（或`RowBounds.limit`
+   =0），就会查询全部的结果。这个参数对于那些在特殊情况下要查询全部结果的人有用。配置该参数后会与上面第二条冲突，解决方法就是如果只想查询count，就设置`pageSize<0`（如 `-1`
+   ），只要不等于0（或者不配置pageSizeZero）就不会出现全部查询的情况。
 
-4. 这个版本没有包含count查询时自动去除`order by`的功能，这个功能将会添加到3.3.0版本中。  
+4. 这个版本没有包含count查询时自动去除`order by`的功能，这个功能将会添加到3.3.0版本中。
 
-5. 为了便于本项目的统一管理和发布，本项目会和github上面同步，项目会改为Maven管理的结构。  
+5. 为了便于本项目的统一管理和发布，本项目会和github上面同步，项目会改为Maven管理的结构。
 
 
 ### v3.2.2
 
-1. 简单重构优化代码。  
+1. 简单重构优化代码。
 
 2. 新增`PageInfo`包装类，对分页结果Page<E>进行封装，方便EL使用。
 
-3. 将`SystemMetaObject`类的`fromObject`方法内置到分页插件中，方便低版本的Mybatis使用该插件。   
+3. 将`SystemMetaObject`类的`fromObject`方法内置到分页插件中，方便低版本的Mybatis使用该插件。
 
 ### v3.2.1
 
@@ -897,9 +1044,9 @@ total = PageHelper.count(()->userMapper.selectLike(user));
 
 ### v3.2.0
 
-1. 增加了对`Hsqldb`的支持，主要目的是为了方便测试使用`Hsqldb`  
+1. 增加了对`Hsqldb`的支持，主要目的是为了方便测试使用`Hsqldb`
 
-2. 增加了该项目的一个测试项目[Mybatis-Sample](http://git.oschina.net/free/Mybatis-Sample)，测试项目数据库使用`Hsqldb`  
+2. 增加了该项目的一个测试项目[Mybatis-Sample](http://git.oschina.net/free/Mybatis-Sample)，测试项目数据库使用`Hsqldb`
 
 3. 增加MIT协议
 
@@ -907,45 +1054,46 @@ total = PageHelper.count(()->userMapper.selectLike(user));
 
 1. 解决count sql在`oracle`中的错误
 
-### v3.1.1 
- 
-1. 统一返回值为`Page<E>`（可以直接按`List`使用）,方便在页面使用EL表达式，如`${page.pageNum}`,`${page.total}`     
-   
+### v3.1.1
+
+1. 统一返回值为`Page<E>`（可以直接按`List`使用）,方便在页面使用EL表达式，如`${page.pageNum}`,`${page.total}`
+
 ### v3.1.0
-  
-1. 解决了`RowBounds`分页的严重BUG，原先会在物理分页基础上进行内存分页导致严重错误，已修复  
 
-2. 增加对MySql的支持，该支持由[鲁家宁](http://my.oschina.net/lujianing)增加。  
-  
-### v3.0 
- 
-1. 现在支持两种形式的分页，使用`PageHelper.startPage`方法或者使用`RowBounds`参数   
+1. 解决了`RowBounds`分页的严重BUG，原先会在物理分页基础上进行内存分页导致严重错误，已修复
 
-2. `PageHelper.startPage`方法修改，原先的`startPage(int pageNum, int pageSize)`默认求count，新增的`startPage(int pageNum, int pageSize, boolean count)`设置`count=false`可以不执行count查询  
+2. 增加对MySql的支持，该支持由[鲁家宁](http://my.oschina.net/lujianing)增加。
 
-3. 移除`endPage`方法，现在本地变量`localPage`改为取出后清空本地变量。  
+### v3.0
 
-4. 修改`Page<E>`类，继承`ArrayList<E>`  
+1. 现在支持两种形式的分页，使用`PageHelper.startPage`方法或者使用`RowBounds`参数
 
-5. 关于两种形式的调用，请看示例代码   
-    
-### v2.1    
+2. `PageHelper.startPage`方法修改，原先的`startPage(int pageNum, int pageSize)`
+   默认求count，新增的`startPage(int pageNum, int pageSize, boolean count)`设置`count=false`可以不执行count查询
 
-1. 解决并发异常  
+3. 移除`endPage`方法，现在本地变量`localPage`改为取出后清空本地变量。
 
-2. 分页sql改为直接拼sql    
+4. 修改`Page<E>`类，继承`ArrayList<E>`
 
-### v2.0  
+5. 关于两种形式的调用，请看示例代码
 
-1. 支持Mybatis缓存，count和分页同时支持（二者同步）  
+### v2.1
+
+1. 解决并发异常
+
+2. 分页sql改为直接拼sql
+
+### v2.0
+
+1. 支持Mybatis缓存，count和分页同时支持（二者同步）
 
 2. 修改拦截器签名，拦截`Executor`
 
 3. 将`Page<E>`类移到外面，方便调用
 
-### v1.0  
+### v1.0
 
-1. 支持`<foreach>`等标签的分页查询  
+1. 支持`<foreach>`等标签的分页查询
 
-2. 提供便捷的使用方式  
+2. 提供便捷的使用方式
 

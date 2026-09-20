@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,11 @@
 
 package com.github.pagehelper;
 
+import com.github.pagehelper.util.SqlSafeUtil;
+import com.github.pagehelper.util.StackTraceUtil;
+import org.apache.ibatis.logging.Log;
+import org.apache.ibatis.logging.LogFactory;
+
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,63 +43,81 @@ import java.util.List;
 public class Page<E> extends ArrayList<E> implements Closeable {
     private static final long serialVersionUID = 1L;
 
+    private static final Log                       log        = LogFactory.getLog(Page.class);
+    /**
+     * 记录当前堆栈,可查找到page在何处创建
+     * 需开启pagehelper.debug
+     */
+    private final        String                    stackTrace = PageInterceptor.isDebug() ? StackTraceUtil.current() : null;
     /**
      * 页码，从1开始
      */
-    private int pageNum;
+    private              int                       pageNum;
     /**
      * 页面大小
      */
-    private int pageSize;
+    private              int                       pageSize;
     /**
      * 起始行
      */
-    private long startRow;
+    private              long                      startRow;
     /**
      * 末行
      */
-    private long endRow;
+    private              long                      endRow;
     /**
      * 总数
      */
-    private long total;
+    private              long                      total;
     /**
      * 总页数
      */
-    private int pages;
+    private              int                       pages;
     /**
      * 包含count查询
      */
-    private boolean count = true;
+    private              boolean                   count      = true;
     /**
      * 分页合理化
      */
-    private Boolean reasonable;
+    private              Boolean                   reasonable;
     /**
      * 当设置为true的时候，如果pagesize设置为0（或RowBounds的limit=0），就不执行分页，返回全部结果
      */
-    private           Boolean                   pageSizeZero;
+    private              Boolean                   pageSizeZero;
     /**
      * 进行count查询的列名
      */
-    private           String                    countColumn;
+    private              String                    countColumn;
     /**
      * 排序
      */
-    private           String                    orderBy;
+    private              String                    orderBy;
     /**
      * 只增加排序
      */
-    private           boolean                   orderByOnly;
+    private              boolean                   orderByOnly;
     /**
      * sql拦截处理
      */
-    private           BoundSqlInterceptor       boundSqlInterceptor;
-    private transient BoundSqlInterceptor.Chain chain;
+    private              BoundSqlInterceptor       boundSqlInterceptor;
+    private transient    BoundSqlInterceptor.Chain chain;
     /**
      * 分页实现类，可以使用 {@link com.github.pagehelper.page.PageAutoDialect} 类中注册的别名，例如 "mysql", "oracle"
      */
-    private           String                    dialectClass;
+    private              String                    dialectClass;
+    /**
+     * 转换count查询时保留查询的 order by 排序
+     */
+    private              Boolean                   keepOrderBy;
+    /**
+     * 转换count查询时保留子查询的 order by 排序
+     */
+    private              Boolean                   keepSubSelectOrderBy;
+    /**
+     * 异步count查询
+     */
+    private              Boolean                   asyncCount;
 
     public Page() {
         super();
@@ -139,6 +162,10 @@ public class Page<E> extends ArrayList<E> implements Closeable {
         this.startRow = rowBounds[0];
         this.count = count;
         this.endRow = this.startRow + rowBounds[1];
+    }
+
+    public String getStackTrace() {
+        return stackTrace;
     }
 
     public List<E> getResult() {
@@ -247,7 +274,28 @@ public class Page<E> extends ArrayList<E> implements Closeable {
         return orderBy;
     }
 
+    /**
+     * 设置排序字段，增加 SQL 注入校验，如果需要在 order by 使用函数，可以使用 {@link #setUnsafeOrderBy(String)} 方法
+     *
+     * @param orderBy 排序字段
+     */
     public <E> Page<E> setOrderBy(String orderBy) {
+        if (SqlSafeUtil.check(orderBy)) {
+            throw new PageException("order by [" + orderBy + "] has a risk of SQL injection, " +
+                    "if you want to avoid SQL injection verification, you can call Page.setUnsafeOrderBy");
+        }
+        this.orderBy = orderBy;
+        return (Page<E>) this;
+    }
+
+    /**
+     * 不安全的设置排序方法，如果从前端接收参数，请自行做好注入校验。
+     * <p>
+     * 请不要故意使用该方法注入然后提交漏洞!!!
+     *
+     * @param orderBy 排序字段
+     */
+    public <E> Page<E> setUnsafeOrderBy(String orderBy) {
         this.orderBy = orderBy;
         return (Page<E>) this;
     }
@@ -266,6 +314,31 @@ public class Page<E> extends ArrayList<E> implements Closeable {
 
     public void setDialectClass(String dialectClass) {
         this.dialectClass = dialectClass;
+    }
+
+    public Boolean getKeepOrderBy() {
+        return keepOrderBy;
+    }
+
+    public Page<E> setKeepOrderBy(Boolean keepOrderBy) {
+        this.keepOrderBy = keepOrderBy;
+        return this;
+    }
+
+    public Boolean getKeepSubSelectOrderBy() {
+        return keepSubSelectOrderBy;
+    }
+
+    public void setKeepSubSelectOrderBy(Boolean keepSubSelectOrderBy) {
+        this.keepSubSelectOrderBy = keepSubSelectOrderBy;
+    }
+
+    public Boolean getAsyncCount() {
+        return asyncCount;
+    }
+
+    public void setAsyncCount(Boolean asyncCount) {
+        this.asyncCount = asyncCount;
     }
 
     /**
@@ -371,8 +444,72 @@ public class Page<E> extends ArrayList<E> implements Closeable {
      * @return
      */
     public Page<E> countColumn(String columnName) {
-        this.countColumn = columnName;
+        setCountColumn(columnName);
         return this;
+    }
+
+    /**
+     * 转换count查询时保留查询的 order by 排序
+     *
+     * @param keepOrderBy
+     * @return
+     */
+    public Page<E> keepOrderBy(boolean keepOrderBy) {
+        this.keepOrderBy = keepOrderBy;
+        return this;
+    }
+
+    public boolean keepOrderBy() {
+        return this.keepOrderBy != null && this.keepOrderBy;
+    }
+
+    /**
+     * 转换count查询时保留子查询的 order by 排序
+     *
+     * @param keepSubSelectOrderBy
+     * @return
+     */
+    public Page<E> keepSubSelectOrderBy(boolean keepSubSelectOrderBy) {
+        this.keepSubSelectOrderBy = keepSubSelectOrderBy;
+        return this;
+    }
+
+    public boolean keepSubSelectOrderBy() {
+        return this.keepSubSelectOrderBy != null && this.keepSubSelectOrderBy;
+    }
+
+    /**
+     * 异步count查询
+     *
+     * @param asyncCount
+     * @return
+     */
+    public Page<E> asyncCount(boolean asyncCount) {
+        this.asyncCount = asyncCount;
+        return this;
+    }
+
+    /**
+     * 使用异步count查询
+     *
+     * @return
+     */
+    public Page<E> enableAsyncCount() {
+        return asyncCount(true);
+    }
+
+    /**
+     * 不使用异步count查询
+     *
+     * @return
+     */
+    public Page<E> disableAsyncCount() {
+        return asyncCount(false);
+    }
+
+
+    public boolean asyncCount() {
+        return this.asyncCount != null && this.asyncCount;
     }
 
     public PageInfo<E> toPageInfo() {
@@ -423,21 +560,6 @@ public class Page<E> extends ArrayList<E> implements Closeable {
         return pageSerializable;
     }
 
-    /**
-     * 兼容低版本 Java 7-
-     */
-    public interface Function<E, T> {
-
-        /**
-         * Applies this function to the given argument.
-         *
-         * @param t the function argument
-         * @return the function result
-         */
-        T apply(E t);
-
-    }
-
     public <E> Page<E> doSelectPage(ISelect select) {
         select.doSelect();
         return (Page<E>) this;
@@ -465,6 +587,9 @@ public class Page<E> extends ArrayList<E> implements Closeable {
     }
 
     public void setCountColumn(String countColumn) {
+        if (!"0".equals(countColumn) && !"*".equals(countColumn) && SqlSafeUtil.check(countColumn)) {
+            throw new PageException("count(" + countColumn + ") has a risk of SQL injection");
+        }
         this.countColumn = countColumn;
     }
 
@@ -502,5 +627,20 @@ public class Page<E> extends ArrayList<E> implements Closeable {
     @Override
     public void close() {
         PageHelper.clearPage();
+    }
+
+    /**
+     * 兼容低版本 Java 7-
+     */
+    public interface Function<E, T> {
+
+        /**
+         * Applies this function to the given argument.
+         *
+         * @param t the function argument
+         * @return the function result
+         */
+        T apply(E t);
+
     }
 }

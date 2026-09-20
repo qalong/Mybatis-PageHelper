@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,13 +30,12 @@ import com.github.pagehelper.PageException;
 import com.github.pagehelper.dialect.AbstractHelperDialect;
 import com.github.pagehelper.dialect.auto.*;
 import com.github.pagehelper.dialect.helper.*;
+import com.github.pagehelper.util.ClassUtil;
 import com.github.pagehelper.util.StringUtil;
 import org.apache.ibatis.mapping.MappedStatement;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,8 +48,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class PageAutoDialect {
 
-    private static Map<String, Class<? extends Dialect>> dialectAliasMap = new HashMap<String, Class<? extends Dialect>>();
-    private static Map<String, Class<? extends AutoDialect>> autoDialectMap = new HashMap<String, Class<? extends AutoDialect>>();
+    private static Map<String, Class<? extends Dialect>>     dialectAliasMap = new LinkedHashMap<>();
+    private static Map<String, Class<? extends AutoDialect>> autoDialectMap  = new LinkedHashMap<>();
 
     public static void registerDialectAlias(String alias, Class<? extends Dialect> dialectClass) {
         dialectAliasMap.put(alias, dialectClass);
@@ -83,7 +82,7 @@ public class PageAutoDialect {
 
         registerDialectAlias("derby", SqlServer2012Dialect.class);
         //达梦数据库,https://github.com/mybatis-book/book/issues/43
-        registerDialectAlias("dm", OracleDialect.class);
+        registerDialectAlias("dm", DmDialect.class);
         //阿里云PPAS数据库,https://github.com/pagehelper/Mybatis-PageHelper/issues/281
         registerDialectAlias("edb", OracleDialect.class);
         //神通数据库
@@ -95,6 +94,17 @@ public class PageAutoDialect {
         registerDialectAlias("xugu", HsqldbDialect.class);
         registerDialectAlias("impala", HsqldbDialect.class);
         registerDialectAlias("firebirdsql", FirebirdDialect.class);
+        //人大金仓数据库
+        registerDialectAlias("kingbase", PostgreSqlDialect.class);
+        // 人大金仓新版本kingbase8
+        registerDialectAlias("kingbase8", PostgreSqlDialect.class);
+        //行云数据库
+        registerDialectAlias("xcloud", CirroDataDialect.class);
+
+        //openGauss数据库
+        registerDialectAlias("opengauss", PostgreSqlDialect.class);
+        registerDialectAlias("gaussdb", GaussDBDialect.class);
+        registerDialectAlias("sundb", OracleDialect.class);
 
         //注册 AutoDialect
         //想要实现和以前版本相同的效果时，可以配置 autoDialectClass=old
@@ -104,6 +114,7 @@ public class PageAutoDialect {
         registerAutoDialectAlias("tomcat-jdbc", TomcatAutoDialect.class);
         registerAutoDialectAlias("dbcp", DbcpAutoDialect.class);
         registerAutoDialectAlias("c3p0", C3P0AutoDialect.class);
+
         //不配置时，默认使用 DataSourceNegotiationAutoDialect
         registerAutoDialectAlias("default", DataSourceNegotiationAutoDialect.class);
     }
@@ -115,19 +126,19 @@ public class PageAutoDialect {
     /**
      * 自动获取dialect,如果没有setProperties或setSqlUtilConfig，也可以正常进行
      */
-    private boolean autoDialect = true;
+    private boolean                            autoDialect        = true;
     /**
      * 属性配置
      */
-    private Properties properties;
+    private Properties                         properties;
     /**
      * 缓存 dialect 实现，key 有两种，分别为 jdbcurl 和 dialectClassName
      */
-    private Map<Object, AbstractHelperDialect> urlDialectMap = new ConcurrentHashMap<Object, AbstractHelperDialect>();
-    private ReentrantLock lock = new ReentrantLock();
-    private AbstractHelperDialect delegate;
+    private Map<Object, AbstractHelperDialect> urlDialectMap      = new ConcurrentHashMap<Object, AbstractHelperDialect>();
+    private ReentrantLock                      lock               = new ReentrantLock();
+    private AbstractHelperDialect              delegate;
     private ThreadLocal<AbstractHelperDialect> dialectThreadLocal = new ThreadLocal<AbstractHelperDialect>();
-    private AutoDialect autoDialectDelegate;
+    private AutoDialect                        autoDialectDelegate;
 
     public static String fromJdbcUrl(String jdbcUrl) {
         final String url = jdbcUrl.toLowerCase();
@@ -150,6 +161,14 @@ public class PageAutoDialect {
     //移除代理对象
     public void clearDelegate() {
         dialectThreadLocal.remove();
+    }
+
+    public AbstractHelperDialect getDialectThreadLocal() {
+        return dialectThreadLocal.get();
+    }
+
+    public void setDialectThreadLocal(AbstractHelperDialect delegate) {
+        this.dialectThreadLocal.set(delegate);
     }
 
     /**
@@ -176,17 +195,17 @@ public class PageAutoDialect {
     public static AbstractHelperDialect instanceDialect(String dialectClass, Properties properties) {
         AbstractHelperDialect dialect;
         if (StringUtil.isEmpty(dialectClass)) {
-            throw new PageException("使用 PageHelper 分页插件时，必须设置 helper 属性");
+            throw new PageException("When you use the PageHelper pagination plugin, you must set the helper property");
         }
         try {
             Class sqlDialectClass = resloveDialectClass(dialectClass);
             if (AbstractHelperDialect.class.isAssignableFrom(sqlDialectClass)) {
                 dialect = (AbstractHelperDialect) sqlDialectClass.newInstance();
             } else {
-                throw new PageException("使用 PageHelper 时，方言必须是实现 " + AbstractHelperDialect.class.getCanonicalName() + " 接口的实现类!");
+                throw new PageException("When using PageHelper, the dialect must be an implementation class that implements the " + AbstractHelperDialect.class.getCanonicalName() + " interface!");
             }
         } catch (Exception e) {
-            throw new PageException("初始化 helper [" + dialectClass + "]时出错:" + e.getMessage(), e);
+            throw new PageException("error initializing helper dialectclass[" + dialectClass + "]" + e.getMessage(), e);
         }
         dialect.setProperties(properties);
         return dialect;
@@ -261,11 +280,12 @@ public class PageAutoDialect {
                 } else {
                     autoDialectClass = (Class<AutoDialect>) Class.forName(autoDialectClassStr);
                 }
-                this.autoDialectDelegate = autoDialectClass.getConstructor().newInstance();
+                this.autoDialectDelegate = ClassUtil.newInstance(autoDialectClass, properties);
             } catch (ClassNotFoundException e) {
-                throw new IllegalArgumentException("请确保 autoDialectClass 配置的 AutoDialect 实现类(" + autoDialectClassStr + ")存在!", e);
+                throw new IllegalArgumentException("Make sure that the AutoDialect implementation class ("
+                        + autoDialectClassStr + ") for the autoDialectClass configuration exists!", e);
             } catch (Exception e) {
-                throw new RuntimeException(autoDialectClassStr + " 类必须提供无参的构造方法", e);
+                throw new RuntimeException(autoDialectClassStr + "Class must provide a constructor without parameters", e);
             }
         } else {
             this.autoDialectDelegate = new DataSourceNegotiationAutoDialect();
@@ -284,16 +304,21 @@ public class PageAutoDialect {
             for (int i = 0; i < alias.length; i++) {
                 String[] kv = alias[i].split("=");
                 if (kv.length != 2) {
-                    throw new IllegalArgumentException("dialectAlias 参数配置错误，" +
-                            "请按照 alias1=xx.dialectClass;alias2=dialectClass2 的形式进行配置!");
+                    throw new IllegalArgumentException("dialectAlias parameter misconfigured," +
+                            "Please follow alias1=xx.dialectClass; alias2=dialectClass2!");
                 }
                 for (int j = 0; j < kv.length; j++) {
                     try {
-                        Class<? extends Dialect> diallectClass = (Class<? extends Dialect>) Class.forName(kv[1]);
-                        //允许覆盖已有的实现
-                        registerDialectAlias(kv[0], diallectClass);
+                        //允许配置如 dm=oracle, 直接引用oracle实现
+                        if (dialectAliasMap.containsKey(kv[1])) {
+                            registerDialectAlias(kv[0], dialectAliasMap.get(kv[1]));
+                        } else {
+                            Class<? extends Dialect> diallectClass = (Class<? extends Dialect>) Class.forName(kv[1]);
+                            //允许覆盖已有的实现
+                            registerDialectAlias(kv[0], diallectClass);
+                        }
                     } catch (ClassNotFoundException e) {
-                        throw new IllegalArgumentException("请确保 dialectAlias 配置的 Dialect 实现类存在!", e);
+                        throw new IllegalArgumentException("Make sure the Dialect implementation class configured by dialectAlias exists!", e);
                     }
                 }
             }
@@ -301,6 +326,8 @@ public class PageAutoDialect {
     }
 
     public void setProperties(Properties properties) {
+
+        this.properties = properties;
         //初始化自定义AutoDialect
         initAutoDialectClass(properties);
         //使用 sqlserver2012 作为默认分页方式，这种情况在动态数据源时方便使用
@@ -317,12 +344,10 @@ public class PageAutoDialect {
         //1.动态多数据源
         if (StringUtil.isNotEmpty(runtimeDialect) && "TRUE".equalsIgnoreCase(runtimeDialect)) {
             this.autoDialect = false;
-            this.properties = properties;
         }
         //2.动态获取方言
         else if (StringUtil.isEmpty(dialect)) {
             autoDialect = true;
-            this.properties = properties;
         }
         //3.指定方言
         else {

@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,7 +47,7 @@ public abstract class PageObjectUtil {
 
     static {
         try {
-            requestClass = Class.forName("javax.servlet.ServletRequest");
+            requestClass = ClassUtil.getServletRequestClass();
             getParameterMap = requestClass.getMethod("getParameterMap", new Class[]{});
             hasRequest = true;
         } catch (Throwable e) {
@@ -69,7 +69,7 @@ public abstract class PageObjectUtil {
      */
     public static <T> Page<T> getPageFromObject(Object params, boolean required) {
         if (params == null) {
-            throw new PageException("无法获取分页查询参数!");
+            throw new PageException("unable to get paginated query parameters!");
         }
         if(params instanceof IPage){
             IPage pageParams = (IPage) params;
@@ -101,7 +101,7 @@ public abstract class PageObjectUtil {
             paramsObject = MetaObjectUtil.forObject(params);
         }
         if (paramsObject == null) {
-            throw new PageException("分页查询参数处理失败!");
+            throw new PageException("The pagination query parameter failed to be processed!");
         }
         Object orderBy = getParamValue(paramsObject, "orderBy", false);
         boolean hasOrderBy = false;
@@ -123,7 +123,7 @@ public abstract class PageObjectUtil {
             pageNum = Integer.parseInt(String.valueOf(_pageNum));
             pageSize = Integer.parseInt(String.valueOf(_pageSize));
         } catch (NumberFormatException e) {
-            throw new PageException("分页参数不是合法的数字类型!", e);
+            throw new PageException("pagination parameters are not a valid number type!", e);
         }
         Page page = new Page(pageNum, pageSize);
         //count查询
@@ -170,7 +170,7 @@ public abstract class PageObjectUtil {
             }
         }
         if (required && value == null) {
-            throw new PageException("分页查询缺少必要的参数:" + PARAMS.get(paramName));
+            throw new PageException("Paginated queries are missing the necessary parameters:" + PARAMS.get(paramName));
         }
         return value;
     }

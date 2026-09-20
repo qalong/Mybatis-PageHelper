@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 
 package com.github.pagehelper;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -41,7 +42,7 @@ import java.util.List;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PageInfo<T> extends PageSerializable<T> {
     public static final int DEFAULT_NAVIGATE_PAGES = 8;
-    public static final PageInfo EMPTY = new PageInfo(Collections.emptyList(), 0);
+    //private PageInfo EMPTY = new PageInfo(Collections.emptyList(), 0);
     /**
      * 当前页
      */
@@ -120,7 +121,7 @@ public class PageInfo<T> extends PageSerializable<T> {
      *
      * @param list
      */
-    public PageInfo(List<T> list) {
+    public PageInfo(List<? extends T> list) {
         this(list, DEFAULT_NAVIGATE_PAGES);
     }
 
@@ -130,7 +131,7 @@ public class PageInfo<T> extends PageSerializable<T> {
      * @param list          page结果
      * @param navigatePages 页码数量
      */
-    public PageInfo(List<T> list, int navigatePages) {
+    public PageInfo(List<? extends T> list, int navigatePages) {
         super(list);
         if (list instanceof Page) {
             Page page = (Page) list;
@@ -162,11 +163,26 @@ public class PageInfo<T> extends PageSerializable<T> {
         }
     }
 
-    public static <T> PageInfo<T> of(List<T> list) {
+    public static <T> PageInfo<T> of(List<? extends T> list) {
         return new PageInfo<T>(list);
     }
 
-    public static <T> PageInfo<T> of(List<T> list, int navigatePages) {
+
+    /**
+     * 手动指定总记录数获取分页信息
+     *
+     * @param total 总记录数
+     * @param list  page结果
+     */
+    public static <T> PageInfo<T> of(long total, List<? extends T> list) {
+        if (list instanceof Page) {
+            Page page = (Page) list;
+            page.setTotal(total);
+        }
+        return new PageInfo<T>(list);
+    }
+
+    public static <T> PageInfo<T> of(List<? extends T> list, int navigatePages) {
         return new PageInfo<T>(list, navigatePages);
     }
 
@@ -176,7 +192,7 @@ public class PageInfo<T> extends PageSerializable<T> {
      * @return
      */
     public static <T> PageInfo<T> emptyPageInfo() {
-        return EMPTY;
+        return new PageInfo(Collections.emptyList(), 0);
     }
 
     public void calcByNavigatePages(int navigatePages) {
@@ -249,6 +265,39 @@ public class PageInfo<T> extends PageSerializable<T> {
         isLastPage = pageNum == pages || pages == 0;
         hasPreviousPage = pageNum > 1;
         hasNextPage = pageNum < pages;
+    }
+
+    /**
+     * 数据对象转换
+     *
+     * @param function 用以转换数据对象的函数
+     * @param <E>      目标类型
+     * @return 转换了对象类型的包装结果
+     */
+    public <E> PageInfo<E> convert(Page.Function<T, E> function) {
+        List<E> list = new ArrayList<E>(this.list.size());
+        for (T t : this.list) {
+            list.add(function.apply(t));
+        }
+        PageInfo<E> newPageInfo = new PageInfo<>(list);
+        newPageInfo.setPageNum(this.pageNum);
+        newPageInfo.setPageSize(this.pageSize);
+        newPageInfo.setSize(this.size);
+        newPageInfo.setStartRow(this.startRow);
+        newPageInfo.setEndRow(this.endRow);
+        newPageInfo.setTotal(this.total);
+        newPageInfo.setPages(this.pages);
+        newPageInfo.setPrePage(this.prePage);
+        newPageInfo.setNextPage(this.nextPage);
+        newPageInfo.setIsFirstPage(this.isFirstPage);
+        newPageInfo.setIsLastPage(this.isLastPage);
+        newPageInfo.setHasPreviousPage(this.hasPreviousPage);
+        newPageInfo.setHasNextPage(this.hasNextPage);
+        newPageInfo.setNavigatePages(this.navigatePages);
+        newPageInfo.setNavigateFirstPage(this.navigateFirstPage);
+        newPageInfo.setNavigateLastPage(this.navigateLastPage);
+        newPageInfo.setNavigatepageNums(this.navigatepageNums);
+        return newPageInfo;
     }
 
     /**

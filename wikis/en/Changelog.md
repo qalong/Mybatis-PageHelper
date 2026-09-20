@@ -1,5 +1,170 @@
 ## Changelog
 
+### 6.1.1 - 2025-06-20
+
+- Add pagination support for SunDB database **by wangsl**
+- Add adapter support for Xugu (虚谷数据库) database **by 吴启洋**
+- Fix issue where `additionalParameter` was not properly copied when copying `countBoundSql` **by yefeng**
+- Fix `offsetPage` example code error **by S00ahKim**
+- Fix Jakarta/Javax ServletRequest compatibility issue, support Spring Boot 3.x **by PING**
+- Add `PageInfo.of()` overloaded method to support manually specifying total record count for pagination info **by yesAnd**
+- Upgrade MyBatis version to 3.5.19 (from 3.5.10)
+- Upgrade Guava version to 33.4.8-jre (from 32.0.0-jre)
+- Upgrade Logback Classic version to 1.2.13 (from 1.2.11)
+- Optimize Xugu JDBC dependency configuration, add `<scope>test</scope>`
+- Fix typos and link references in English documentation **by Coco Liliace**
+- Add relevant comments to improve code readability **by yesAnd**
+- Resolve dependency security vulnerabilities, update related component versions
+- Maven publishing migrated from legacy OSSRH (oss.sonatype.org) to new Maven Central Portal (central.sonatype.com)
+- pagehelper-sqlparser upgraded to 6.1.1, added sqlparser4.9 and sqlparser5.1 modules for JSqlParser 4.9/5.0/5.1/5.2/5.3 support
+
+#### Compatibility Notes
+- This version maintains backward compatibility with previous versions
+- New database support: SunDB, Xugu (虚谷数据库)
+- Fixed Spring Boot 3.x compatibility issues, recommended for users using Jakarta EE
+
+#### Upgrade Recommendations
+- All users are recommended to upgrade, especially those using Spring Boot 3.x or requiring new database support
+- Users of SunDB or Xugu databases can directly use pagination features
+- Please ensure dependency version compatibility before
+
+### 6.1.0 - 2023-12-16
+
+- Released version 6.1.0, PageHelper provides direct dependency on jsqlparser as intermediate interfaces, allowing
+  default implementation replacement through SPI.
+- Upgraded jsqlparser version to 4.7, re-implemented order by, pagination, and count queries.
+- Simplified pom.xml configuration, removed shade-embedded jsqlparser approach, and switched to selecting different
+  jsqlparser versions through external dependencies, allowing self-SPI extension.
+- jsqlparser parsing no longer uses a thread pool, supporting SPI extension to override SqlParser implementation.
+- Changed SqlServer pagination to SqlServerSqlParser interface, added parameter sqlServerSqlParser to override the
+  default value.
+- Extracted OrderByParser to OrderBySqlParser interface, added orderBySqlParser parameter to override the default
+  implementation.
+- Changed static methods of OrderByParser to regular methods, preparing for future interface changes.
+- JSqlParser interface is no longer needed after JDK 8+, removed the interface, and marked the parameter in the
+  documentation (_This parameter was used in the early stages to support special configuration for SQL Server_).
+  Compatible with jsqlparser 4.7 version.
+- Fixed maven-compiler-plugin version to remove warnings and improve build stability. qxo
+- Added .vscode to .gitignore for vscode IDE. qxo
+- Fixed bug https://github.com/pagehelper/Mybatis-PageHelper/issues/779. chenyuehui
+
+To ensure compatibility with jsqlparser 4.5, 4.7, and possible future versions,
+a new project called pagehelper-sqlparser has been created.
+Currently, it provides two implementations: 4.5 and 4.7.
+To use it, exclude jsqlparser from pagehelper and select one jsqlparser implementation.
+The current version defaults to using the code from version 4.7.
+If you want to switch to the 4.5 implementation, follow the configuration steps below:
+
+```xml
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>pagehelper</artifactId>
+    <version>6.1.1</version>
+    <exclusions>
+        <exclusion>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>sqlparser4.5</artifactId>
+    <version>6.1.1</version>
+</dependency>
+```
+
+The priority of replacing default values with SPI is lower than the implementations specified by the sqlServerSqlParser,
+orderBySqlParser, and countSqlParser parameters.
+If no specific implementation is specified, the SPI implementation will take effect if available.
+You can refer to the code in the pagehelper-sqlsource module for SPI implementation examples.
+
+By default, JSqlParser uses a temporarily created `Executors.newSingleThreadExecutor()` for parsing SQL.
+Here, the thread pool is bypassed through the API:
+
+```java
+CCJSqlParser parser = CCJSqlParserUtil.newParser(statementReader);
+parser.withSquareBracketQuotation(true);
+return parser.Statement();
+```
+
+The purpose of using a thread pool in JSqlParser is to prevent parsing timeouts. Therefore, if you have encountered
+timeout situations,
+you can introduce the following dependency (which overrides the default implementation through SPI with a timeout of 10
+seconds):
+
+```xml
+<dependency>
+    <groupId>com.github.pagehelper</groupId>
+    <artifactId>sqlparser-timeout</artifactId>
+    <version>6.1.1</version>
+</dependency>
+```
+
+### 6.0.0 - 2023-11-05
+
+- Based on JDK 8 adaptation, JDK 6 and 7 are not supported from 6.0 onwards, and 5.x versions can be used if necessary
+- Added asynchronous count support, configure `asyncCount` globally, default `false`，single activation
+  by `PageHelper.startPage(1, 10).enableAsyncCount()`;
+  Asynchronous queries are performed using independent connections (transactions),
+  and it is not suitable to enable asynchronous queries when the query is affected by addition, deletion, and
+  modification operations. closed #334
+- JSqlParser opens `parser.withSquareBracketQuotation(true)` by default and supports SqlServer `[]`(**6.1.0 remove this
+  parameter**)
+- feat: A new method for data object conversion has been added to the `PageInfo`,
+  method: ` <E> PageInfo<E> convert(Page.Function<T, E> function)` **by codeke**
+- `CountSqlParser` is changed to an interface, allowing the `countSqlParser` parameter to be replaced with your own
+  implementation, which is supported #772
+- `dialectAlias` supports simplified configurations, e.g. `dm=oracle;oracle=oracle9i`, a direct reference to the current
+  abbreviation, without writing the full name of the class
+- `countColumn`add injection detection, fixed #686
+- Add the `PageParam` class, which does not embed objects (will affect the use), if you want to use, you can inherit the
+  object,closed #562
+- All exception messages have been changed to English
+- open `setLocalPage` method, support #771
+- Solve the problem of handling order by error when `sqlserver` with union sql parsing,fixed #768
+- Optimized the total logic to solve the problem that the query is not pagination and the order by is invalid. fixed
+  #641
+- Modify the dialect instantiation logic to ensure that the class is used after the configuration is completed. fixed
+  #742
+- `dialectAliasMap` change to `LinkedHashMap` type, support matching in configuration order, fixed #758
+- fixed the pagination bug of xingyun database **by maimaitiyaer_bonc**
+-
+### 5.3.3 - 2023-06-03
+
+- Ignoring unnecessarily generated surefire-report **by java-codehunger**
+- Supports parsing of the dialect corresponding to the openGauss database from the URL **by saxisuer**
+- Fixed the issue that SQL injection verification was incorrect #716 **by uyong**
+- Support parsing of the dialect corresponding to Kingbase 8 from the URL **by univ**
+- Add support for cirrodata #705 **by sxh0570**
+
+### 5.3.2 - 2022-09-18
+
+- Use document update, all parameters are included, the default home page document changed to Chinese.
+- Add support for kingbase. by **HanHuimin001**
+- Add 'debug' parameter, default 'false', turn on 'debug' mode when 'true', call stack will be recorded after 'debug'
+  mode starts. by **huyingqian**
+- add supports for count sql hint syntax. by **zhanliquan**
+- Add a `PageProperties` interface, which can be used by the instantiated extension class inside the framework to obtain
+  the paging plug-in configuration.
+- To add the `CountMsIdGen` interface, you can configure a custom implementation class by `CountMsIdGen`, which is used
+  to generate the msId for the query corresponding to the COUNT query. The default implementation is still `countSuffix`
+  , with extensions like 'selectByExample' mapped to the corresponding 'selectCountByExample' method.
+- Added `keepOrderBy` and `keepSubSelectOrderBy` configurations.
+- Add the `sqlParser` configuration and add the `JSqlParser` interface to solve the problem that JSqlParser and JDK
+  compatibility cause no additional configuration.(**6.1.0 remove this parameter**)
+- The test uses the Logback logging framework and removes log4j.
+- Resolve that 'dialectKey' is empty resulting in NPE，fixed #656
+
+For a detailed description of the above parameters, see [**How to use PageHelper**](HowToUse.md).
+
+### 5.3.1 - 2022-06-14
+
+- Resolve CVE-2022-28111 vulnerability, limit the order by parameter, avoid SQL injection
+- Add support for as400. **by bluezealot**
+- Optimize generic parameters of `Page` class **by Zhang Fulai * *
+- Standardize the order of PostgreSQL paging parameters **by outian**
+
 ### 5.3.0 - 2021-10-07
 
 - Add `AutoDialect` interface to automatically obtain the database type, which can be configured as its own
@@ -19,12 +184,12 @@
   variable `PAGEHELPER_BANNER=false`.
   ```
    DEBUG [main] -
-   
-   ,------.                           ,--.  ,--.         ,--.                         
+
+   ,------.                           ,--.  ,--.         ,--.
    |  .--. '  ,--,--.  ,---.   ,---.  |  '--'  |  ,---.  |  |  ,---.   ,---.  ,--.--.
    |  '--' | ' ,-.  | | .-. | | .-. : |  .--.  | | .-. : |  | | .-. | | .-. : |  .--'
-   |  | --'  \ '-'  | ' '-' ' \   --. |  |  |  | \   --. |  | | '-' ' \   --. |  |    
-   `--'       `--`--' .`-  /   `----' `--'  `--'  `----' `--' |  |-'   `----' `--'    
+   |  | --'  \ '-'  | ' '-' ' \   --. |  |  |  | \   --. |  | | '-' ' \   --. |  |
+   `--'       `--`--' .`-  /   `----' `--'  `--'  `----' `--' |  |-'   `----' `--'
    `---'                                   `--'                        is intercepting.
    ```
   The purpose of adding banner is that if you configure paging plug-ins multiple times, you will see banner output
@@ -526,13 +691,13 @@ Because the `selectLeftjoin_COUNT` method is invoked automatically, there is no 
 The above method to perform the portion of the output log is as follows：
 ```
 DEBUG [main] - ==>  Preparing: select count(distinct a.id) from user a left join user b on a.id = b.id
-DEBUG [main] - ==> Parameters: 
+DEBUG [main] - ==> Parameters:
 TRACE [main] - <==    Columns: C1
 TRACE [main] - <==        Row: 183
 DEBUG [main] - <==      Total: 1
 DEBUG [main] - Cache Hit Ratio [com.github.pagehelper.mapper.CountryMapper]: 0.0
 DEBUG [main] - ==>  Preparing: select a.id,b.name,a.py from user a left join user b on a.id = b.id order by a.id LIMIT 10
-DEBUG [main] - ==> Parameters: 
+DEBUG [main] - ==> Parameters:
 TRACE [main] - <==    Columns: ID, COUNTRYNAME, COUNTRYCODE
 TRACE [main] - <==        Row: 1, Angola, AO
 TRACE [main] - <==        Row: 2, Afghanistan, AF
@@ -564,9 +729,11 @@ TRACE [main] - <==        Row: 3, Albania, AL
 - New pagination plugin only a `dialect` parameter, the default `dialect` is `PageHelper`
 - `PageHelper` continue to support previously provided parameters, Among the latest to use the document has been fully updated
 - `PageHelper` has a `helperDialect` parameter which is the same functional as the previous `dialect`
-- Added paging implementation based on pure `RowBounds` and `PageRowBounds`, 
-in `com.github. pagehelper. dialect. rowbounds` package, it is used as `dialect` Parameter sample implementation, more detailed documentation will be added later
-- Removed inappropriate orderby functions that appear in pagination plugin. It will provide a separate sort plug-ins in the future
+- Added paging implementation based on pure `RowBounds` and `PageRowBounds`,
+  in `com.github. pagehelper. dialect. rowbounds` package, it is used as `dialect` Parameter sample implementation, more
+  detailed documentation will be added later
+- Removed inappropriate orderby functions that appear in pagination plugin. It will provide a separate sort plug-ins in
+  the future
 - Remove `PageHelper` are less commonly used methods
 - A new document, an important part of the update has been mentioned in the changelog, provides the English version of this document
 - fix bug [#149](http://git.oschina.net/free/Mybatis_PageHelper/issues/149)

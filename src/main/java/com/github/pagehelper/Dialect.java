@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,9 @@ import org.apache.ibatis.session.RowBounds;
 
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
 
 /**
  * 数据库方言，针对不同数据库进行实现
@@ -47,6 +50,26 @@ public interface Dialect {
      * @return true 跳过，返回默认查询结果，false 执行分页查询
      */
     boolean skip(MappedStatement ms, Object parameterObject, RowBounds rowBounds);
+
+    /**
+     * 是否使用异步 count 查询，使用异步后不会根据返回的 count 数来判断是否有必要进行分页查询
+     *
+     * @return true 异步，false 同步
+     */
+    default boolean isAsyncCount() {
+        return false;
+    }
+
+    /**
+     * 执行异步 count 查询
+     *
+     * @param task 异步查询任务
+     * @param <T>
+     * @return
+     */
+    default <T> Future<T> asyncCountTask(Callable<T> task) {
+        return ForkJoinPool.commonPool().submit(task);
+    }
 
     /**
      * 执行分页前，返回 true 会进行 count 查询，false 会继续下面的 beforePage 判断

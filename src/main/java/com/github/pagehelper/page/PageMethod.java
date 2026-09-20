@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,15 +36,15 @@ import java.util.Properties;
  * @author liuzh
  */
 public abstract class PageMethod {
-    protected static final ThreadLocal<Page> LOCAL_PAGE = new ThreadLocal<Page>();
-    protected static boolean DEFAULT_COUNT = true;
+    protected static final ThreadLocal<Page> LOCAL_PAGE    = new ThreadLocal<Page>();
+    protected static       boolean           DEFAULT_COUNT = true;
 
     /**
      * 设置 Page 参数
      *
      * @param page
      */
-    protected static void setLocalPage(Page page) {
+    public static void setLocalPage(Page page) {
         LOCAL_PAGE.set(page);
     }
 
@@ -71,7 +71,8 @@ public abstract class PageMethod {
      * @return
      */
     public static long count(ISelect select) {
-        Page<?> page = startPage(1, -1, true);
+        //单纯count查询时禁用异步count
+        Page<?> page = startPage(1, -1, true).disableAsyncCount();
         select.doSelect();
         return page.getTotal();
     }
@@ -185,6 +186,9 @@ public abstract class PageMethod {
         Page<?> page = getLocalPage();
         if (page != null) {
             page.setOrderBy(orderBy);
+            if (page.getPageSizeZero() != null && page.getPageSizeZero() && page.getPageSize() == 0) {
+                page.setOrderByOnly(true);
+            }
         } else {
             page = new Page();
             page.setOrderBy(orderBy);
@@ -198,9 +202,9 @@ public abstract class PageMethod {
      *
      * @param properties 插件属性
      */
-    protected static void setStaticProperties(Properties properties){
+    protected static void setStaticProperties(Properties properties) {
         //defaultCount，这是一个全局生效的参数，多数据源时也是统一的行为
-        if(properties != null){
+        if (properties != null) {
             DEFAULT_COUNT = Boolean.valueOf(properties.getProperty("defaultCount", "true"));
         }
     }

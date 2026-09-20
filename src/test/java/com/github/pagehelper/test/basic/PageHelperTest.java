@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,7 @@ package com.github.pagehelper.test.basic;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageParam;
 import com.github.pagehelper.mapper.UserMapper;
 import com.github.pagehelper.model.User;
 import com.github.pagehelper.util.MybatisHelper;
@@ -134,6 +135,12 @@ public class PageHelperTest {
 
             //获取第3页，20条内容，默认查询总数count
             PageHelper.startPage(3, 20);
+            list = sqlSession.selectList("selectAll");
+            assertEquals(20, list.size());
+            assertEquals(183, ((Page<?>) list).getTotal());
+
+            //获取第3页，20条内容，默认查询总数count
+            PageHelper.startPage(new PageParam(4, 20));
             list = sqlSession.selectList("selectAll");
             assertEquals(20, list.size());
             assertEquals(183, ((Page<?>) list).getTotal());

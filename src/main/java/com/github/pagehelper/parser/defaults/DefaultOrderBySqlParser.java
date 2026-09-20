@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 abel533@gmail.com
+ * Copyright (c) 2014-2023 abel533@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +22,11 @@
  * THE SOFTWARE.
  */
 
-package com.github.pagehelper.parser;
+package com.github.pagehelper.parser.defaults;
 
 import com.github.pagehelper.PageException;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import com.github.pagehelper.parser.OrderBySqlParser;
+import com.github.pagehelper.parser.SqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 import org.apache.ibatis.logging.Log;
@@ -39,8 +40,9 @@ import java.util.List;
  * @author liuzh
  * @since 2015-06-27
  */
-public class OrderByParser {
-    private static final Log log = LogFactory.getLog(OrderByParser.class);
+public class DefaultOrderBySqlParser implements OrderBySqlParser {
+    private static final Log log = LogFactory.getLog(DefaultOrderBySqlParser.class);
+
     /**
      * convert to order by sql
      *
@@ -48,23 +50,23 @@ public class OrderByParser {
      * @param orderBy
      * @return
      */
-    public static String converToOrderBySql(String sql, String orderBy) {
+    @Override
+    public String converToOrderBySql(String sql, String orderBy) {
         //解析SQL
         Statement stmt = null;
         try {
-            stmt = CCJSqlParserUtil.parse(sql);
+            stmt = SqlParserUtil.parse(sql);
             Select select = (Select) stmt;
-            SelectBody selectBody = select.getSelectBody();
             //处理body-去最外层order by
-            List<OrderByElement> orderByElements = extraOrderBy(selectBody);
+            List<OrderByElement> orderByElements = extraOrderBy(select);
             String defaultOrderBy = PlainSelect.orderByToString(orderByElements);
             if (defaultOrderBy.indexOf('?') != -1) {
-                throw new PageException("原SQL[" + sql + "]中的order by包含参数，因此不能使用OrderBy插件进行修改!");
+                throw new PageException("The order by in the original SQL[" + sql + "] contains parameters, so it cannot be modified using the OrderBy plugin!");
             }
             //新的sql
             sql = select.toString();
         } catch (Throwable e) {
-            log.warn("处理排序失败: " + e + "，降级为直接拼接 order by 参数");
+            log.warn("Failed to handle sorting: " + e + ", downgraded to a direct splice of the order by parameter");
         }
         return sql + " order by " + orderBy;
     }
@@ -72,25 +74,16 @@ public class OrderByParser {
     /**
      * extra order by and set default orderby to null
      *
-     * @param selectBody
+     * @param select
      */
-    public static List<OrderByElement> extraOrderBy(SelectBody selectBody) {
-        if (selectBody != null) {
-            if (selectBody instanceof PlainSelect) {
-                List<OrderByElement> orderByElements = ((PlainSelect) selectBody).getOrderByElements();
-                ((PlainSelect) selectBody).setOrderByElements(null);
+    public static List<OrderByElement> extraOrderBy(Select select) {
+        if (select != null) {
+            if (select instanceof PlainSelect || select instanceof SetOperationList) {
+                List<OrderByElement> orderByElements = select.getOrderByElements();
+                select.setOrderByElements(null);
                 return orderByElements;
-            } else if (selectBody instanceof WithItem) {
-                WithItem withItem = (WithItem) selectBody;
-                if (withItem.getSubSelect() != null) {
-                    return extraOrderBy(withItem.getSubSelect().getSelectBody());
-                }
-            } else {
-                SetOperationList operationList = (SetOperationList) selectBody;
-                if (operationList.getSelects() != null && operationList.getSelects().size() > 0) {
-                    List<SelectBody> plainSelects = operationList.getSelects();
-                    return extraOrderBy(plainSelects.get(plainSelects.size() - 1));
-                }
+            } else if (select instanceof ParenthesedSelect) {
+                extraOrderBy(((ParenthesedSelect) select).getSelect());
             }
         }
         return null;
